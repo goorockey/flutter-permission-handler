@@ -205,8 +205,16 @@ public class PermissionHandlerPlugin implements MethodCallHandler {
   public void onMethodCall(MethodCall call, Result result) {
     switch (call.method) {
       case "checkPermissionStatus": {
-        @PermissionGroup final int permission = (int) call.arguments;
-        @PermissionStatus final int permissionStatus = checkPermissionStatus(permission);
+        if (call.argument("permission") == null) {
+          result.success(PERMISSION_STATUS_GRANTED);
+        }
+
+        @PermissionGroup final int permission = (int) call.argument("permission");
+        boolean ignoreLocationService = false;
+        if (call.argument("ignoreLocationService") != null) {
+          ignoreLocationService = (boolean) call.argument("ignoreLocationService");
+        }
+        @PermissionStatus final int permissionStatus = checkPermissionStatus(permission, ignoreLocationService);
 
         result.success(permissionStatus);
         break;
@@ -228,8 +236,12 @@ public class PermissionHandlerPlugin implements MethodCallHandler {
         }
 
         mResult = result;
-        final List<Integer> permissions = call.arguments();
-        requestPermissions(permissions);
+        final List<Integer> permissions = call.argument("permissions");
+        boolean ignoreLocationService = false;
+        if (call.argument("ignoreLocationService")) {
+          ignoreLocationService = (boolean) call.argument("ignoreLocationService");
+        }
+        requestPermissions(permissions, ignoreLocationService);
         break;
       case "shouldShowRequestPermissionRationale": {
         @PermissionGroup final int permission = (int) call.arguments;
@@ -247,7 +259,7 @@ public class PermissionHandlerPlugin implements MethodCallHandler {
   }
 
   @PermissionStatus
-  private int checkPermissionStatus(@PermissionGroup int permission) {
+  private int checkPermissionStatus(@PermissionGroup int permission, boolean ignoreLocationService) {
     final List<String> names = getManifestNames(permission);
 
     if (names == null) {
@@ -297,7 +309,7 @@ public class PermissionHandlerPlugin implements MethodCallHandler {
     }
 
     if (permission == PERMISSION_GROUP_LOCATION || permission == PERMISSION_GROUP_LOCATION_ALWAYS || permission == PERMISSION_GROUP_LOCATION_WHEN_IN_USE) {
-      if (!isLocationServiceEnabled(context)) {
+      if (!ignoreLocationService && !isLocationServiceEnabled(context)) {
         return PERMISSION_STATUS_DISABLED;
       }
     }
@@ -381,7 +393,7 @@ public class PermissionHandlerPlugin implements MethodCallHandler {
     return false;
   }
 
-  private void requestPermissions(List<Integer> permissions) {
+  private void requestPermissions(List<Integer> permissions, boolean ignoreLocationService) {
     if (mRegistrar.activity() == null) {
       Log.d(LOG_TAG, "Unable to detect current Activity.");
 
@@ -395,7 +407,7 @@ public class PermissionHandlerPlugin implements MethodCallHandler {
 
     ArrayList<String> permissionsToRequest = new ArrayList<>();
     for (Integer permission : permissions) {
-      @PermissionStatus final int permissionStatus = checkPermissionStatus(permission);
+      @PermissionStatus final int permissionStatus = checkPermissionStatus(permission, ignoreLocationService);
       if (permissionStatus != PERMISSION_STATUS_GRANTED) {
         final List<String> names = getManifestNames(permission);
 

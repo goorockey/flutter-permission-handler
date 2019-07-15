@@ -30,9 +30,9 @@ class PermissionHandler {
   ///
   /// Returns a [Future] containing the current permission status for the supplied [PermissionGroup].
   Future<PermissionStatus> checkPermissionStatus(
-      PermissionGroup permission) async {
+      PermissionGroup permission, {bool ignoreLocationService = false}) async {
     final int status = await _methodChannel.invokeMethod(
-        'checkPermissionStatus', permission.value);
+        'checkPermissionStatus', {"permission": permission.value, "ignoreLocationService": ignoreLocationService});
 
     return Codec.decodePermissionStatus(status);
   }
@@ -79,10 +79,13 @@ class PermissionHandler {
   ///
   /// Returns a [Map] containing the status per requested permissiongroup.
   Future<Map<PermissionGroup, PermissionStatus>> requestPermissions(
-      List<PermissionGroup> permissions) async {
+      List<PermissionGroup> permissions, {bool ignoreLocationService = false}) async {
     final List<int> data = Codec.encodePermissionGroups(permissions);
     final Map<dynamic, dynamic> status =
-        await _methodChannel.invokeMethod('requestPermissions', data);
+        await _methodChannel.invokeMethod('requestPermissions', {
+          "permissions": data,
+          "ignoreLocationService": ignoreLocationService,
+        });
 
     return Codec.decodePermissionRequestResult(Map<int, int>.from(status));
   }

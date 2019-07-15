@@ -26,7 +26,7 @@
 
 - (void)handleMethodCall:(FlutterMethodCall *)call result:(FlutterResult)result {
     if ([@"checkPermissionStatus" isEqualToString:call.method]) {
-        PermissionGroup permission = [Codec decodePermissionGroupFrom:call.arguments];
+        PermissionGroup permission = [Codec decodePermissionGroupFrom:call.arguments[@"permission"]];
         [PermissionManager checkPermissionStatus:permission result:result];
     } else if ([@"checkServiceStatus" isEqualToString:call.method]) {
         PermissionGroup permission = [Codec decodePermissionGroupFrom:call.arguments];
@@ -37,7 +37,7 @@
         }
         
         _methodResult = result;
-        NSArray *permissions = [Codec decodePermissionGroupsFrom:call.arguments];
+        NSArray *permissions = [Codec decodePermissionGroupsFrom:call.arguments[@"permissions"]];
         
         [_permissionManager
          requestPermissions:permissions completion:^(NSDictionary *permissionRequestResults) {

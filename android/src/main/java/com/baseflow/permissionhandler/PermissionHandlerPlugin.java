@@ -238,7 +238,7 @@ public class PermissionHandlerPlugin implements MethodCallHandler {
         mResult = result;
         final List<Integer> permissions = call.argument("permissions");
         boolean ignoreLocationService = false;
-        if (call.argument("ignoreLocationService")) {
+        if (call.argument("ignoreLocationService") != null) {
           ignoreLocationService = (boolean) call.argument("ignoreLocationService");
         }
         requestPermissions(permissions, ignoreLocationService);

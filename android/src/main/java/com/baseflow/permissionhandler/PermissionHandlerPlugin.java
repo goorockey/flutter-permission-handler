@@ -3,6 +3,9 @@ package com.baseflow.permissionhandler;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.AppOpsManager;
+import android.app.usage.UsageStats;
+import android.app.usage.UsageStatsManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
@@ -24,6 +27,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +46,7 @@ public class PermissionHandlerPlugin implements MethodCallHandler {
   private static final String LOG_TAG = "permissions_handler";
   private static final int PERMISSION_CODE = 24;
   private static final int PERMISSION_CODE_IGNORE_BATTERY_OPTIMIZATIONS = 5672353;
+  private static final int PERMISSION_CODE_PACKAGE_USAGE = 2350192;
 
   //PERMISSION_GROUP
   private static final int PERMISSION_GROUP_CALENDAR = 0;
@@ -61,6 +66,7 @@ public class PermissionHandlerPlugin implements MethodCallHandler {
   private static final int PERMISSION_GROUP_STORAGE = 14;
   private static final int PERMISSION_GROUP_IGNORE_BATTERY_OPTIMIZATIONS = 15;
   private static final int PERMISSION_GROUP_UNKNOWN = 16;
+  private static final int PERMISSION_GROUP_PACKAGE_USAGE = 17;
 
   private PermissionHandlerPlugin(Registrar mRegistrar) {
     this.mRegistrar = mRegistrar;
@@ -85,6 +91,7 @@ public class PermissionHandlerPlugin implements MethodCallHandler {
       PERMISSION_GROUP_STORAGE,
       PERMISSION_GROUP_IGNORE_BATTERY_OPTIMIZATIONS,
       PERMISSION_GROUP_UNKNOWN,
+      PERMISSION_GROUP_PACKAGE_USAGE,
   })
   private @interface PermissionGroup {
   }
@@ -124,7 +131,7 @@ public class PermissionHandlerPlugin implements MethodCallHandler {
   private @interface ServiceStatus {
   }
 
-  public static void registerWith(Registrar registrar) {
+  public static void registerWith(final Registrar registrar) {
     final MethodChannel channel = new MethodChannel(registrar.messenger(), "flutter.baseflow.com/permissions/methods");
     final PermissionHandlerPlugin permissionHandlerPlugin = new PermissionHandlerPlugin(registrar);
     channel.setMethodCallHandler(permissionHandlerPlugin);
@@ -149,6 +156,10 @@ public class PermissionHandlerPlugin implements MethodCallHandler {
           return true;
         }
 
+        if (requestCode == PERMISSION_CODE_PACKAGE_USAGE) {
+          permissionHandlerPlugin.handlePackageUsageRequest(registrar.context());
+          return true;
+        }
         return false;
       }
     });
@@ -260,6 +271,24 @@ public class PermissionHandlerPlugin implements MethodCallHandler {
 
   @PermissionStatus
   private int checkPermissionStatus(@PermissionGroup int permission, boolean ignoreLocationService) {
+    final Context context = mRegistrar.activity() == null ? mRegistrar.activeContext() : mRegistrar.activity();
+    if (context == null) {
+      Log.d(LOG_TAG, "Unable to detect current Activity or App Context.");
+      return PERMISSION_STATUS_UNKNOWN;
+    }
+
+    if (permission == PERMISSION_GROUP_PACKAGE_USAGE) {
+      if (VERSION.SDK_INT < VERSION_CODES.LOLLIPOP) {
+        return PERMISSION_STATUS_DISABLED;
+      }
+
+      if (hasPackageUsageAccessPermission(context)) {
+          return PERMISSION_STATUS_GRANTED;
+      } else {
+          return PERMISSION_STATUS_DENIED;
+      }
+    }
+
     final List<String> names = getManifestNames(permission);
 
     if (names == null) {
@@ -271,12 +300,6 @@ public class PermissionHandlerPlugin implements MethodCallHandler {
     //if no permissions were found then there is an issue and permission is not set in Android manifest
     if (names.size() == 0) {
       Log.d(LOG_TAG, "No permissions found in manifest for: " + permission);
-      return PERMISSION_STATUS_UNKNOWN;
-    }
-
-    final Context context = mRegistrar.activity() == null ? mRegistrar.activeContext() : mRegistrar.activity();
-    if (context == null) {
-      Log.d(LOG_TAG, "Unable to detect current Activity or App Context.");
       return PERMISSION_STATUS_UNKNOWN;
     }
 
@@ -299,6 +322,7 @@ public class PermissionHandlerPlugin implements MethodCallHandler {
             return PERMISSION_STATUS_RESTRICTED;
           }
         }
+
         final int permissionStatus = ContextCompat.checkSelfPermission(context, name);
         if (permissionStatus == PackageManager.PERMISSION_DENIED) {
           return PERMISSION_STATUS_DENIED;
@@ -409,6 +433,14 @@ public class PermissionHandlerPlugin implements MethodCallHandler {
     for (Integer permission : permissions) {
       @PermissionStatus final int permissionStatus = checkPermissionStatus(permission, ignoreLocationService);
       if (permissionStatus != PERMISSION_STATUS_GRANTED) {
+        if (permission == PERMISSION_GROUP_PACKAGE_USAGE) {
+          if (VERSION.SDK_INT >= VERSION_CODES.LOLLIPOP) {
+            Intent intent = new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS);
+            mRegistrar.activity().startActivityForResult(intent, PERMISSION_CODE_PACKAGE_USAGE);
+          }
+          continue;
+        }
+
         final List<String> names = getManifestNames(permission);
 
         //check to see if we can find manifest names
@@ -422,11 +454,11 @@ public class PermissionHandlerPlugin implements MethodCallHandler {
         }
 
         if (permission == PERMISSION_GROUP_IGNORE_BATTERY_OPTIMIZATIONS) {
-          String packageName = mRegistrar.context().getPackageName();
-          Intent intent = new Intent();
-          intent.setAction(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
-          intent.setData(Uri.parse("package:" + packageName));
-          mRegistrar.activity().startActivityForResult(intent, PERMISSION_CODE_IGNORE_BATTERY_OPTIMIZATIONS);
+            String packageName = mRegistrar.context().getPackageName();
+            Intent intent = new Intent();
+            intent.setAction(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+            intent.setData(Uri.parse("package:" + packageName));
+            mRegistrar.activity().startActivityForResult(intent, PERMISSION_CODE_IGNORE_BATTERY_OPTIMIZATIONS);
         } else {
           permissionsToRequest.addAll(names);
         }
@@ -497,6 +529,19 @@ public class PermissionHandlerPlugin implements MethodCallHandler {
     mRequestResults.put(PERMISSION_GROUP_IGNORE_BATTERY_OPTIMIZATIONS, status);
 
     processResult();
+  }
+
+  private void handlePackageUsageRequest(Context context) {
+      if (mResult == null) {
+          return;
+      }
+
+      boolean granted = hasPackageUsageAccessPermission(context);
+      int status = granted ? PERMISSION_STATUS_GRANTED : PERMISSION_STATUS_DENIED;
+
+      mRequestResults.put(PERMISSION_GROUP_PACKAGE_USAGE, status);
+
+      processResult();
   }
 
   @PermissionStatus
@@ -711,4 +756,22 @@ public class PermissionHandlerPlugin implements MethodCallHandler {
       return !TextUtils.isEmpty(locationProviders);
     }
   }
+
+    private boolean hasPackageUsageAccessPermission(Context context) {
+        if (Build.VERSION.SDK_INT >= VERSION_CODES.LOLLIPOP_MR1) {
+            UsageStatsManager usageStatsManager = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
+            Calendar calendar = Calendar.getInstance();
+            long endTime = calendar.getTimeInMillis();
+            calendar.add(Calendar.DAY_OF_WEEK, -2);//
+            long startTime = calendar.getTimeInMillis();
+            List<UsageStats> list = usageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_YEARLY, startTime, endTime);
+            return list.size() > 0;
+        } else {
+            AppOpsManager appOps = (AppOpsManager) context
+                    .getSystemService(Context.APP_OPS_SERVICE);
+            int mode = appOps.checkOpNoThrow("android:get_usage_stats",
+                    android.os.Process.myUid(), context.getPackageName());
+            return mode == AppOpsManager.MODE_ALLOWED;
+        }
+    }
 }

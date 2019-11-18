@@ -150,6 +150,10 @@ class PermissionGroup {
   /// The unknown permission only used for return type, never requested
   static const PermissionGroup unknown = PermissionGroup._(16);
 
+  /// Android: detect app usage on device
+  /// iOS: Nothing
+  static const PermissionGroup packageUsage = PermissionGroup._(17);
+
   static const List<PermissionGroup> values = <PermissionGroup>[
     calendar,
     camera,
@@ -168,6 +172,7 @@ class PermissionGroup {
     storage,
     ignoreBatteryOptimizations,
     unknown,
+    packageUsage,
   ];
 
   static const List<String> _names = <String>[
@@ -188,6 +193,7 @@ class PermissionGroup {
     'storage',
     'ignoreBatteryOptimizations',
     'unknown',
+    'packageUsage',
   ];
 
   @override

@@ -435,8 +435,10 @@ public class PermissionHandlerPlugin implements MethodCallHandler {
       if (permissionStatus != PERMISSION_STATUS_GRANTED) {
         if (permission == PERMISSION_GROUP_PACKAGE_USAGE) {
           if (VERSION.SDK_INT >= VERSION_CODES.LOLLIPOP) {
+              final Activity activity = mRegistrar.activity();
             Intent intent = new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS);
-            mRegistrar.activity().startActivityForResult(intent, PERMISSION_CODE_PACKAGE_USAGE);
+            activity.startActivityForResult(intent, PERMISSION_CODE_PACKAGE_USAGE);
+            activity.startActivity(new Intent(activity, PackageUsageAssistActivity.class));
           }
           continue;
         }

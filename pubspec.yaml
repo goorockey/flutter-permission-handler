@@ -8,7 +8,7 @@ authors:
 homepage: https://github.com/baseflowit/flutter-permission-handler
 
 environment:
-  sdk: ">=2.1.0 <3.0.0"
+  sdk: ">=2.12.0 <4.0.0"
 
 dependencies:
   flutter:
